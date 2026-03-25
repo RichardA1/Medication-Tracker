@@ -1,0 +1,635 @@
+# ============================================================================
+# Medication Tracker — Mushroom Cards Dashboard (Premium UI)
+# ============================================================================
+# Requires these HACS frontend cards:
+#   • mushroom           https://github.com/piitaya/lovelace-mushroom
+#   • button-card        https://github.com/custom-cards/button-card
+#   • auto-entities      https://github.com/thomasloven/lovelace-auto-entities
+#   • stack-in-card      https://github.com/custom-cards/stack-in-card
+#   • card-mod           https://github.com/thomasloven/lovelace-card-mod
+#
+# Customise:
+#   Replace sensor.YOUR_MEDICATION_ENTITY_N with your actual entity IDs.
+#   Replace YOUR_ITEM_UUID_N with the item_id UUID from each sensor's attributes.
+# ============================================================================
+
+title: 💊 Medications
+
+views:
+
+# ============================================================================
+# OVERVIEW — Mushroom chips row + at-a-glance cards
+# ============================================================================
+  - title: Overview
+    path: overview
+    icon: mdi:pill
+
+    cards:
+
+      # ── Mushroom title card ─────────────────────────────────────────────────
+      - type: custom:mushroom-title-card
+        title: Medication Tracker
+        subtitle: >-
+          {{ now().strftime('%A, %B %-d') }} ·
+          {{ expand(label_entities('medication_tracker')) | count }} medications tracked
+
+      # ── Quick-action chips row ─────────────────────────────────────────────
+      - type: custom:mushroom-chips-card
+        chips:
+          - type: template
+            icon: mdi:cog-outline
+            content: Manage
+            tap_action:
+              action: navigate
+              navigation_path: /config/integrations/integration/medication_tracker
+            icon_color: blue
+
+          - type: template
+            icon: mdi:calendar-clock
+            content: Schedules
+            tap_action:
+              action: navigate
+              navigation_path: /lovelace/schedules
+            icon_color: green
+
+          - type: entity
+            entity: sensor.YOUR_MEDICATION_ENTITY_1
+            icon: mdi:pill
+            content: >-
+              {{ states(config.entity) }} left
+            icon_color: >-
+              {{ 'red' if state_attr(config.entity, 'low_stock') else 'green' }}
+
+          - type: entity
+            entity: sensor.YOUR_MEDICATION_ENTITY_2
+            icon: mdi:pill
+            content: >-
+              {{ states(config.entity) }} left
+            icon_color: >-
+              {{ 'red' if state_attr(config.entity, 'low_stock') else 'green' }}
+
+          # Add one chip per medication following the pattern above.
+
+      # ── Low stock alert chips (auto-shown when stock is low) ───────────────
+      - type: conditional
+        conditions:
+          - condition: template
+            value_template: >-
+              {{ state_attr('sensor.YOUR_MEDICATION_ENTITY_1', 'low_stock') == true
+                 or state_attr('sensor.YOUR_MEDICATION_ENTITY_2', 'low_stock') == true }}
+        card:
+          type: custom:mushroom-template-card
+          primary: Low Stock Alert
+          secondary: >-
+            {% set low = [] %}
+            {% for e in ['sensor.YOUR_MEDICATION_ENTITY_1','sensor.YOUR_MEDICATION_ENTITY_2'] %}
+              {% if state_attr(e, 'low_stock') %}
+                {% set low = low + [state_attr(e, 'name')] %}
+              {% endif %}
+            {% endfor %}
+            {{ low | join(', ') }} need{{ 's' if low|count == 1 else '' }} a refill.
+          icon: mdi:alert-circle-outline
+          icon_color: red
+          fill_container: false
+          tap_action:
+            action: navigate
+            navigation_path: /lovelace/medications
+
+      # ── Today's doses card ─────────────────────────────────────────────────
+      - type: custom:mushroom-template-card
+        primary: Today's Schedule
+        secondary: >-
+          {% set today = now().strftime('%A').lower() %}
+          {% set ns = namespace(items=[]) %}
+          {% for e in ['sensor.YOUR_MEDICATION_ENTITY_1','sensor.YOUR_MEDICATION_ENTITY_2'] %}
+            {% set scheds = state_attr(e, 'schedules') %}
+            {% if scheds %}
+              {% for s in scheds %}
+                {% if today in s.get('days',[]) and s.get('enabled',true) %}
+                  {% set ns.items = ns.items + [state_attr(e,'name') ~ ' at ' ~ s.time[:5]] %}
+                {% endif %}
+              {% endfor %}
+            {% endif %}
+          {% endfor %}
+          {{ ns.items | join(' · ') if ns.items else 'No doses scheduled today.' }}
+        icon: mdi:calendar-today
+        icon_color: blue
+
+      # ── Medication summary grid ────────────────────────────────────────────
+      - type: grid
+        columns: 2
+        square: false
+        cards:
+
+          # MEDICATION 1
+          - type: custom:mushroom-template-card
+            entity: sensor.YOUR_MEDICATION_ENTITY_1
+            primary: >-
+              {{ state_attr(entity, 'name') }}
+            secondary: >-
+              {{ state_attr(entity, 'dosage') }} ·
+              {{ states(entity) }} remaining
+            icon: >-
+              {{ 'mdi:pill-off' if state_attr(entity, 'low_stock') else 'mdi:pill' }}
+            icon_color: >-
+              {{ 'red' if state_attr(entity, 'low_stock') else 'green' }}
+            badge_icon: >-
+              {{ 'mdi:alert' if state_attr(entity, 'low_stock') else '' }}
+            badge_color: red
+            tap_action:
+              action: more-info
+            hold_action:
+              action: navigate
+              navigation_path: /lovelace/medications
+
+          # MEDICATION 2
+          - type: custom:mushroom-template-card
+            entity: sensor.YOUR_MEDICATION_ENTITY_2
+            primary: >-
+              {{ state_attr(entity, 'name') }}
+            secondary: >-
+              {{ state_attr(entity, 'dosage') }} ·
+              {{ states(entity) }} remaining
+            icon: >-
+              {{ 'mdi:pill-off' if state_attr(entity, 'low_stock') else 'mdi:pill' }}
+            icon_color: >-
+              {{ 'red' if state_attr(entity, 'low_stock') else 'green' }}
+            badge_icon: >-
+              {{ 'mdi:alert' if state_attr(entity, 'low_stock') else '' }}
+            badge_color: red
+            tap_action:
+              action: more-info
+            hold_action:
+              action: navigate
+              navigation_path: /lovelace/medications
+
+          # Add more medication cards here.
+
+
+# ============================================================================
+# MEDICATIONS VIEW — Full mushroom card per medication
+# ============================================================================
+  - title: Medications
+    path: medications
+    icon: mdi:pill-multiple
+
+    cards:
+
+      - type: custom:mushroom-title-card
+        title: Your Medications
+        subtitle: Tap a card for details · Hold for actions
+
+      # ========================================================================
+      # MEDICATION 1 — Full Detail Card
+      # Duplicate this entire block for each medication.
+      # ========================================================================
+      - type: custom:stack-in-card
+        mode: vertical
+        card_mod:
+          style: |
+            ha-card {
+              border-radius: 16px;
+              overflow: hidden;
+              box-shadow: 0 2px 12px rgba(0,0,0,0.15);
+            }
+        cards:
+
+          # Header with photo
+          - type: custom:mushroom-template-card
+            entity: sensor.YOUR_MEDICATION_ENTITY_1
+            primary: >-
+              {{ state_attr(entity, 'name') }}
+            secondary: >-
+              {{ state_attr(entity, 'dosage') }}
+            icon: mdi:pill
+            icon_color: >-
+              {{ 'red' if state_attr(entity, 'low_stock') else 'indigo' }}
+            layout: horizontal
+            fill_container: true
+            card_mod:
+              style: |
+                ha-card {
+                  background: var(--primary-color);
+                  --primary-text-color: var(--text-primary-color);
+                  border-radius: 0;
+                }
+
+          # Stats row
+          - type: custom:mushroom-chips-card
+            chips:
+              - type: template
+                content: >-
+                  {{ states('sensor.YOUR_MEDICATION_ENTITY_1') }} remaining
+                icon: mdi:counter
+                icon_color: >-
+                  {{ 'red' if state_attr('sensor.YOUR_MEDICATION_ENTITY_1', 'low_stock') else 'green' }}
+
+              - type: template
+                content: >-
+                  Refill at {{ state_attr('sensor.YOUR_MEDICATION_ENTITY_1', 'refill_threshold') }}
+                icon: mdi:bell-ring-outline
+                icon_color: orange
+
+              - type: template
+                content: >-
+                  {% set next = state_attr('sensor.YOUR_MEDICATION_ENTITY_1', 'next_dose_time') %}
+                  {% if next %}
+                    Next: {{ as_datetime(next).strftime('%-I:%M %p') }}
+                  {% else %}No schedule{% endif %}
+                icon: mdi:clock-outline
+                icon_color: blue
+
+          # Instructions
+          - type: custom:mushroom-template-card
+            entity: sensor.YOUR_MEDICATION_ENTITY_1
+            primary: Instructions
+            secondary: >-
+              {{ state_attr(entity, 'instructions') or 'No special instructions.' }}
+            icon: mdi:information-outline
+            icon_color: teal
+            fill_container: true
+
+          # Schedules detail
+          - type: markdown
+            content: >-
+              **📅 Dose Schedules**
+
+              {% set scheds = state_attr('sensor.YOUR_MEDICATION_ENTITY_1', 'schedules') %}
+              {% if scheds and scheds | count > 0 %}
+                | Days | Time | Dose | Active |
+                |------|------|------|--------|
+                {% for s in scheds %}
+                | {{ s.days | join(', ') | title }} | {{ s.time[:5] }} | {{ s.dose_quantity }} | {{ '✅' if s.enabled else '⏸️' }} |
+                {% endfor %}
+              {% else %}
+                _No schedules. [Add one now.](/config/integrations/integration/medication_tracker)_
+              {% endif %}
+
+          # Action buttons using mushroom-number-card + custom:button-card
+          - type: horizontal-stack
+            cards:
+
+              # Take Dose
+              - type: custom:button-card
+                entity: sensor.YOUR_MEDICATION_ENTITY_1
+                name: Take Dose
+                icon: mdi:pill-off
+                confirmation:
+                  text: >-
+                    [[[ return 'Log a dose of ' + entity.attributes.name + '?' ]]]
+                tap_action:
+                  action: call-service
+                  service: medication_tracker.take_dose
+                  service_data:
+                    item_id: YOUR_ITEM_UUID_1
+                    dose_quantity: 1        # ← match your schedule dose_quantity
+                styles:
+                  card:
+                    - background: rgba(var(--warning-color-rgb, 255,152,0), 0.15)
+                    - border: 1px solid var(--warning-color)
+                    - border-radius: 12px
+                    - padding: 12px 4px
+                  icon:
+                    - color: var(--warning-color)
+                  name:
+                    - font-size: 0.75rem
+                    - font-weight: 600
+
+              # Add Stock
+              - type: custom:button-card
+                entity: sensor.YOUR_MEDICATION_ENTITY_1
+                name: Add Stock
+                icon: mdi:plus-box-outline
+                confirmation:
+                  text: "Add 30 to current stock?"
+                tap_action:
+                  action: call-service
+                  service: medication_tracker.add_quantity
+                  service_data:
+                    item_id: YOUR_ITEM_UUID_1
+                    quantity: 30             # ← change to your refill quantity
+                styles:
+                  card:
+                    - background: rgba(var(--success-color-rgb, 76,175,80), 0.15)
+                    - border: 1px solid var(--success-color)
+                    - border-radius: 12px
+                    - padding: 12px 4px
+                  icon:
+                    - color: var(--success-color)
+                  name:
+                    - font-size: 0.75rem
+                    - font-weight: 600
+
+              # Manage (open config flow)
+              - type: custom:button-card
+                name: Manage
+                icon: mdi:pencil-outline
+                tap_action:
+                  action: navigate
+                  navigation_path: /config/integrations/integration/medication_tracker
+                styles:
+                  card:
+                    - background: rgba(var(--info-color-rgb, 33,150,243), 0.15)
+                    - border: 1px solid var(--info-color)
+                    - border-radius: 12px
+                    - padding: 12px 4px
+                  icon:
+                    - color: var(--info-color)
+                  name:
+                    - font-size: 0.75rem
+                    - font-weight: 600
+
+      # ──────────────────────────────────────────────────────────────────────
+      # MEDICATION 2 — Full Detail Card (copy of Medication 1 structure)
+      # ──────────────────────────────────────────────────────────────────────
+      - type: custom:stack-in-card
+        mode: vertical
+        card_mod:
+          style: |
+            ha-card {
+              border-radius: 16px;
+              overflow: hidden;
+              box-shadow: 0 2px 12px rgba(0,0,0,0.15);
+            }
+        cards:
+          - type: custom:mushroom-template-card
+            entity: sensor.YOUR_MEDICATION_ENTITY_2
+            primary: >-
+              {{ state_attr(entity, 'name') }}
+            secondary: >-
+              {{ state_attr(entity, 'dosage') }}
+            icon: mdi:pill
+            icon_color: >-
+              {{ 'red' if state_attr(entity, 'low_stock') else 'indigo' }}
+            layout: horizontal
+            fill_container: true
+            card_mod:
+              style: |
+                ha-card {
+                  background: var(--primary-color);
+                  --primary-text-color: var(--text-primary-color);
+                  border-radius: 0;
+                }
+
+          - type: custom:mushroom-chips-card
+            chips:
+              - type: template
+                content: >-
+                  {{ states('sensor.YOUR_MEDICATION_ENTITY_2') }} remaining
+                icon: mdi:counter
+                icon_color: >-
+                  {{ 'red' if state_attr('sensor.YOUR_MEDICATION_ENTITY_2', 'low_stock') else 'green' }}
+
+              - type: template
+                content: >-
+                  Refill at {{ state_attr('sensor.YOUR_MEDICATION_ENTITY_2', 'refill_threshold') }}
+                icon: mdi:bell-ring-outline
+                icon_color: orange
+
+              - type: template
+                content: >-
+                  {% set next = state_attr('sensor.YOUR_MEDICATION_ENTITY_2', 'next_dose_time') %}
+                  {% if next %}
+                    Next: {{ as_datetime(next).strftime('%-I:%M %p') }}
+                  {% else %}No schedule{% endif %}
+                icon: mdi:clock-outline
+                icon_color: blue
+
+          - type: custom:mushroom-template-card
+            entity: sensor.YOUR_MEDICATION_ENTITY_2
+            primary: Instructions
+            secondary: >-
+              {{ state_attr(entity, 'instructions') or 'No special instructions.' }}
+            icon: mdi:information-outline
+            icon_color: teal
+            fill_container: true
+
+          - type: markdown
+            content: >-
+              **📅 Dose Schedules**
+
+              {% set scheds = state_attr('sensor.YOUR_MEDICATION_ENTITY_2', 'schedules') %}
+              {% if scheds and scheds | count > 0 %}
+                | Days | Time | Dose | Active |
+                |------|------|------|--------|
+                {% for s in scheds %}
+                | {{ s.days | join(', ') | title }} | {{ s.time[:5] }} | {{ s.dose_quantity }} | {{ '✅' if s.enabled else '⏸️' }} |
+                {% endfor %}
+              {% else %}
+                _No schedules. [Add one now.](/config/integrations/integration/medication_tracker)_
+              {% endif %}
+
+          - type: horizontal-stack
+            cards:
+              - type: custom:button-card
+                entity: sensor.YOUR_MEDICATION_ENTITY_2
+                name: Take Dose
+                icon: mdi:pill-off
+                confirmation:
+                  text: >-
+                    [[[ return 'Log a dose of ' + entity.attributes.name + '?' ]]]
+                tap_action:
+                  action: call-service
+                  service: medication_tracker.take_dose
+                  service_data:
+                    item_id: YOUR_ITEM_UUID_2
+                    dose_quantity: 1
+                styles:
+                  card:
+                    - background: rgba(var(--warning-color-rgb, 255,152,0), 0.15)
+                    - border: 1px solid var(--warning-color)
+                    - border-radius: 12px
+                    - padding: 12px 4px
+                  icon:
+                    - color: var(--warning-color)
+                  name:
+                    - font-size: 0.75rem
+                    - font-weight: 600
+
+              - type: custom:button-card
+                entity: sensor.YOUR_MEDICATION_ENTITY_2
+                name: Add Stock
+                icon: mdi:plus-box-outline
+                confirmation:
+                  text: "Add 30 to current stock?"
+                tap_action:
+                  action: call-service
+                  service: medication_tracker.add_quantity
+                  service_data:
+                    item_id: YOUR_ITEM_UUID_2
+                    quantity: 30
+                styles:
+                  card:
+                    - background: rgba(var(--success-color-rgb, 76,175,80), 0.15)
+                    - border: 1px solid var(--success-color)
+                    - border-radius: 12px
+                    - padding: 12px 4px
+                  icon:
+                    - color: var(--success-color)
+                  name:
+                    - font-size: 0.75rem
+                    - font-weight: 600
+
+              - type: custom:button-card
+                name: Manage
+                icon: mdi:pencil-outline
+                tap_action:
+                  action: navigate
+                  navigation_path: /config/integrations/integration/medication_tracker
+                styles:
+                  card:
+                    - background: rgba(var(--info-color-rgb, 33,150,243), 0.15)
+                    - border: 1px solid var(--info-color)
+                    - border-radius: 12px
+                    - padding: 12px 4px
+                  icon:
+                    - color: var(--info-color)
+                  name:
+                    - font-size: 0.75rem
+                    - font-weight: 600
+
+
+# ============================================================================
+# SCHEDULES VIEW
+# ============================================================================
+  - title: Schedules
+    path: schedules
+    icon: mdi:calendar-clock
+
+    cards:
+
+      - type: custom:mushroom-title-card
+        title: Weekly Schedule
+        subtitle: >-
+          {{ now().strftime('%A') }} — all scheduled doses for the week
+
+      # Full week table
+      - type: markdown
+        content: >-
+          {% set days = ['monday','tuesday','wednesday','thursday','friday','saturday','sunday'] %}
+          {% set entities = [
+              'sensor.YOUR_MEDICATION_ENTITY_1',
+              'sensor.YOUR_MEDICATION_ENTITY_2'
+          ] %}
+          {% set today = now().strftime('%A').lower() %}
+
+          | | Mon | Tue | Wed | Thu | Fri | Sat | Sun |
+          |---|---|---|---|---|---|---|---|
+          {% for e in entities %}
+          {% set name = state_attr(e, 'name') %}
+          {% set scheds = state_attr(e, 'schedules') or [] %}
+          | **{{ name }}** |
+          {%- for day in days -%}
+            {%- set ns = namespace(times=[]) -%}
+            {%- for s in scheds -%}
+              {%- if day in s.get('days',[]) and s.get('enabled',true) -%}
+                {%- set ns.times = ns.times + [s.time[:5]] -%}
+              {%- endif -%}
+            {%- endfor -%}
+            {{ ns.times | join('<br>') if ns.times else '—' }} |
+          {%- endfor %}
+          {% endfor %}
+
+      # Today's doses with take-dose buttons
+      - type: custom:mushroom-title-card
+        title: Today's Doses
+        subtitle: >-
+          {{ now().strftime('%A, %B %-d') }}
+
+      # Medication 1 — today's dose chip
+      - type: conditional
+        conditions:
+          - condition: template
+            value_template: >-
+              {% set today = now().strftime('%A').lower() %}
+              {% set scheds = state_attr('sensor.YOUR_MEDICATION_ENTITY_1', 'schedules') or [] %}
+              {{ scheds | selectattr('days', 'contains', today) | selectattr('enabled') | list | count > 0 }}
+        card:
+          type: custom:stack-in-card
+          mode: horizontal
+          cards:
+            - type: custom:mushroom-template-card
+              entity: sensor.YOUR_MEDICATION_ENTITY_1
+              primary: >-
+                {{ state_attr(entity, 'name') }} {{ state_attr(entity, 'dosage') }}
+              secondary: >-
+                {% set today = now().strftime('%A').lower() %}
+                {% set scheds = state_attr(entity, 'schedules') or [] %}
+                {% set times = scheds | selectattr('days', 'contains', today) | map(attribute='time') | list %}
+                Today at {{ times | map('truncate', 5, true, '') | join(', ') }}
+              icon: mdi:pill
+              icon_color: indigo
+              fill_container: true
+
+            - type: custom:button-card
+              name: Take
+              icon: mdi:check-circle-outline
+              confirmation:
+                text: >-
+                  [[[ return 'Take dose of ' + states['sensor.YOUR_MEDICATION_ENTITY_1'].attributes.name + '?' ]]]
+              tap_action:
+                action: call-service
+                service: medication_tracker.take_dose
+                service_data:
+                  item_id: YOUR_ITEM_UUID_1
+                  dose_quantity: 1
+              styles:
+                card:
+                  - background: rgba(var(--success-color-rgb, 76,175,80), 0.2)
+                  - border: 1px solid var(--success-color)
+                  - border-radius: 12px
+                  - width: 80px
+                  - padding: 8px
+                icon:
+                  - color: var(--success-color)
+                name:
+                  - font-size: 0.75rem
+
+      # Medication 2 — today's dose chip
+      - type: conditional
+        conditions:
+          - condition: template
+            value_template: >-
+              {% set today = now().strftime('%A').lower() %}
+              {% set scheds = state_attr('sensor.YOUR_MEDICATION_ENTITY_2', 'schedules') or [] %}
+              {{ scheds | selectattr('days', 'contains', today) | selectattr('enabled') | list | count > 0 }}
+        card:
+          type: custom:stack-in-card
+          mode: horizontal
+          cards:
+            - type: custom:mushroom-template-card
+              entity: sensor.YOUR_MEDICATION_ENTITY_2
+              primary: >-
+                {{ state_attr(entity, 'name') }} {{ state_attr(entity, 'dosage') }}
+              secondary: >-
+                {% set today = now().strftime('%A').lower() %}
+                {% set scheds = state_attr(entity, 'schedules') or [] %}
+                {% set times = scheds | selectattr('days', 'contains', today) | map(attribute='time') | list %}
+                Today at {{ times | map('truncate', 5, true, '') | join(', ') }}
+              icon: mdi:pill
+              icon_color: indigo
+              fill_container: true
+
+            - type: custom:button-card
+              name: Take
+              icon: mdi:check-circle-outline
+              confirmation:
+                text: >-
+                  [[[ return 'Take dose of ' + states['sensor.YOUR_MEDICATION_ENTITY_2'].attributes.name + '?' ]]]
+              tap_action:
+                action: call-service
+                service: medication_tracker.take_dose
+                service_data:
+                  item_id: YOUR_ITEM_UUID_2
+                  dose_quantity: 1
+              styles:
+                card:
+                  - background: rgba(var(--success-color-rgb, 76,175,80), 0.2)
+                  - border: 1px solid var(--success-color)
+                  - border-radius: 12px
+                  - width: 80px
+                  - padding: 8px
+                icon:
+                  - color: var(--success-color)
+                name:
+                  - font-size: 0.75rem

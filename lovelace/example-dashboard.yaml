@@ -1,0 +1,711 @@
+# ============================================================================
+# Medication Tracker — Lovelace Dashboard
+# ============================================================================
+# Repository : https://github.com/YOUR_USERNAME/medication-tracker
+# Docs       : lovelace/README.md
+# HA minimum : 2024.1.0
+#
+# HOW TO USE THIS FILE
+# ─────────────────────────────────────────────────────────────────────────────
+# 1. Copy this file to your Home Assistant config directory:
+#      config/lovelace/medication-dashboard.yaml
+#
+# 2. In your main lovelace configuration (configuration.yaml or UI), add:
+#      lovelace:
+#        mode: yaml                 # if using full YAML mode
+#
+#    OR import as a dashboard:
+#      Settings → Dashboards → + Add Dashboard → From YAML
+#
+# 3. Find your medication entity IDs:
+#      Developer Tools → States → filter by "medication_tracker"
+#    Each medication creates a sensor like: sensor.metformin_500mg
+#    Copy the entity IDs and replace the PLACEHOLDER values below.
+#
+# 4. Find your medication item_id (UUID) for service calls:
+#      Developer Tools → States → click your medication sensor
+#      → look at the "item_id" attribute (a UUID string)
+#
+# CUSTOM CARDS (optional but recommended for best appearance)
+# ─────────────────────────────────────────────────────────────────────────────
+#   Install via HACS → Frontend:
+#   • button-card          — https://github.com/custom-cards/button-card
+#   • mushroom             — https://github.com/piitaya/lovelace-mushroom
+#   • auto-entities        — https://github.com/thomasloven/lovelace-auto-entities
+#   • mini-graph-card      — https://github.com/kalkih/mini-graph-card
+#   • stack-in-card        — https://github.com/custom-cards/stack-in-card
+#   • card-mod             — https://github.com/thomasloven/lovelace-card-mod
+#
+#   Built-in-only sections are marked: [BUILT-IN ONLY]
+#   Sections using custom cards are marked: [REQUIRES CUSTOM CARDS]
+# ============================================================================
+
+title: 💊 Medications
+
+views:
+
+# ============================================================================
+# VIEW 1 — OVERVIEW
+# Quick summary + low-stock alerts + today's schedule
+# ============================================================================
+  - title: Overview
+    path: overview
+    icon: mdi:pill
+    type: panel
+    cards:
+      - type: vertical-stack
+        cards:
+
+          # ── Header / Management Actions ──────────────────────────────────────
+          - type: markdown
+            content: >-
+              <ha-icon icon="mdi:pill"></ha-icon>&nbsp;&nbsp;**Medication Tracker**
+            card_mod:
+              style: |
+                ha-card {
+                  background: var(--primary-color);
+                  color: var(--text-primary-color);
+                  border-radius: 12px 12px 0 0;
+                  margin-bottom: 0;
+                  padding: 4px 8px;
+                }
+                ha-markdown { font-size: 1.1rem; font-weight: 600; }
+
+          # Manage button row — opens the integration config flow
+          - type: horizontal-stack
+            cards:
+              - type: button
+                name: Add / Edit Medications
+                icon: mdi:pill-multiple
+                tap_action:
+                  action: navigate
+                  navigation_path: /config/integrations/integration/medication_tracker
+                card_mod:
+                  style: |
+                    ha-card { border-radius: 0; margin: 0; }
+
+              - type: button
+                name: Today's Schedules
+                icon: mdi:calendar-clock
+                tap_action:
+                  action: navigate
+                  navigation_path: /lovelace/schedules
+                card_mod:
+                  style: |
+                    ha-card { border-radius: 0; margin: 0; }
+
+              - type: button
+                name: All Medications
+                icon: mdi:format-list-bulleted
+                tap_action:
+                  action: navigate
+                  navigation_path: /lovelace/medications
+                card_mod:
+                  style: |
+                    ha-card { border-radius: 0; margin: 0; }
+
+          # ── Low Stock Alert Banner (only shows when stock is low) ────────────
+          # [BUILT-IN ONLY] Replace sensor name with your actual entity IDs
+          # Add one block per medication below.
+
+          - type: conditional
+            conditions:
+              # This shows if ANY of your medications is low stock.
+              # Add conditions for each medication using OR logic via template.
+              - condition: template
+                value_template: >-
+                  {{ state_attr('sensor.YOUR_MEDICATION_ENTITY_1', 'low_stock') == true
+                     or state_attr('sensor.YOUR_MEDICATION_ENTITY_2', 'low_stock') == true }}
+            card:
+              type: markdown
+              content: >-
+                ## ⚠️ Low Stock Alert
+
+                One or more medications needs a refill soon.
+                Check the **Medications** tab for details.
+              card_mod:
+                style: |
+                  ha-card {
+                    background: rgba(var(--error-color-rgb, 244,67,54), 0.15);
+                    border: 2px solid var(--error-color);
+                    border-radius: 8px;
+                  }
+
+          # ── Next Doses Due ───────────────────────────────────────────────────
+          # Shows the next scheduled doses across all tracked medications.
+          # [BUILT-IN ONLY — entities card]
+          - type: entities
+            title: Next Scheduled Doses
+            icon: mdi:clock-outline
+            show_header_toggle: false
+            entities:
+
+              # ── MEDICATION 1 ─────────────────────────────────────────────────
+              # Replace sensor.YOUR_MEDICATION_ENTITY_1 with your actual entity.
+              - type: attribute
+                entity: sensor.YOUR_MEDICATION_ENTITY_1
+                attribute: next_dose_time
+                name: >-
+                  {{ state_attr('sensor.YOUR_MEDICATION_ENTITY_1', 'name') }}
+                  {{ state_attr('sensor.YOUR_MEDICATION_ENTITY_1', 'dosage') }}
+                icon: mdi:clock-time-eight-outline
+                format: time
+
+              # ── MEDICATION 2 ─────────────────────────────────────────────────
+              - type: attribute
+                entity: sensor.YOUR_MEDICATION_ENTITY_2
+                attribute: next_dose_time
+                name: >-
+                  {{ state_attr('sensor.YOUR_MEDICATION_ENTITY_2', 'name') }}
+                  {{ state_attr('sensor.YOUR_MEDICATION_ENTITY_2', 'dosage') }}
+                icon: mdi:clock-time-eight-outline
+                format: time
+
+              # Add more medications here following the same pattern.
+
+          # ── Quick Quantity Summary ───────────────────────────────────────────
+          - type: entities
+            title: Quantities on Hand
+            icon: mdi:pill
+            show_header_toggle: false
+            entities:
+              - entity: sensor.YOUR_MEDICATION_ENTITY_1
+                name: >-
+                  {{ state_attr('sensor.YOUR_MEDICATION_ENTITY_1', 'name') }}
+                  ({{ state_attr('sensor.YOUR_MEDICATION_ENTITY_1', 'dosage') }})
+                icon: >-
+                  {{ 'mdi:pill-off' if state_attr('sensor.YOUR_MEDICATION_ENTITY_1', 'low_stock') else 'mdi:pill' }}
+
+              - entity: sensor.YOUR_MEDICATION_ENTITY_2
+                name: >-
+                  {{ state_attr('sensor.YOUR_MEDICATION_ENTITY_2', 'name') }}
+                  ({{ state_attr('sensor.YOUR_MEDICATION_ENTITY_2', 'dosage') }})
+                icon: >-
+                  {{ 'mdi:pill-off' if state_attr('sensor.YOUR_MEDICATION_ENTITY_2', 'low_stock') else 'mdi:pill' }}
+
+              # Add more medications here.
+
+
+# ============================================================================
+# VIEW 2 — MEDICATIONS (detailed cards per medication)
+# ============================================================================
+  - title: Medications
+    path: medications
+    icon: mdi:pill-multiple
+
+    cards:
+
+      # ── Instructions header ───────────────────────────────────────────────
+      - type: markdown
+        content: >-
+          ### 💊 Your Medications
+
+          Use **[Settings → Integrations → Medication Tracker → Configure](
+          /config/integrations/integration/medication_tracker)** to add, edit,
+          or delete medications and schedules.
+
+          Tap **Take Dose**, **Add Stock**, or **Set Quantity** buttons below
+          to update inventory.
+
+      # ======================================================================
+      # MEDICATION CARD TEMPLATE
+      # ======================================================================
+      # Copy the entire block below (from "- type: custom:stack-in-card" to
+      # the next "# MEDICATION CARD TEMPLATE") for each medication you have.
+      # Replace ALL occurrences of:
+      #   sensor.YOUR_MEDICATION_ENTITY_1  →  your actual sensor entity ID
+      #   YOUR_ITEM_UUID_1                 →  the item_id UUID from the sensor's attributes
+      # ======================================================================
+
+      # ── MEDICATION 1 ───────────────────────────────────────────────────────
+      - type: custom:stack-in-card
+        mode: vertical
+        cards:
+
+          # Photo + name header
+          - type: picture-entity
+            entity: sensor.YOUR_MEDICATION_ENTITY_1
+            name: >-
+              {{ state_attr('sensor.YOUR_MEDICATION_ENTITY_1', 'name') }}
+              {{ state_attr('sensor.YOUR_MEDICATION_ENTITY_1', 'dosage') }}
+            show_name: true
+            show_state: false
+            # The entity_picture is populated from the photo_path attribute.
+            # If no photo is set, this falls back to the pill icon.
+            image: >-
+              {{ state_attr('sensor.YOUR_MEDICATION_ENTITY_1', 'photo_path') or '/static/icons/favicon-192x192.png' }}
+            tap_action:
+              action: more-info
+
+          # Quantity + low-stock status
+          - type: entities
+            show_header_toggle: false
+            entities:
+              - entity: sensor.YOUR_MEDICATION_ENTITY_1
+                name: Quantity on Hand
+                icon: mdi:counter
+
+              - type: attribute
+                entity: sensor.YOUR_MEDICATION_ENTITY_1
+                attribute: refill_threshold
+                name: Refill Alert Threshold
+                icon: mdi:bell-alert-outline
+
+              - type: attribute
+                entity: sensor.YOUR_MEDICATION_ENTITY_1
+                attribute: low_stock
+                name: Low Stock
+                icon: mdi:alert-circle-outline
+
+              - type: attribute
+                entity: sensor.YOUR_MEDICATION_ENTITY_1
+                attribute: next_dose_time
+                name: Next Dose
+                icon: mdi:clock-outline
+                format: datetime
+
+              - type: attribute
+                entity: sensor.YOUR_MEDICATION_ENTITY_1
+                attribute: instructions
+                name: Instructions
+                icon: mdi:information-outline
+
+              - type: attribute
+                entity: sensor.YOUR_MEDICATION_ENTITY_1
+                attribute: date_added
+                name: Added On
+                icon: mdi:calendar
+                format: date
+
+          # Low stock warning (only shown when low)
+          - type: conditional
+            conditions:
+              - condition: template
+                value_template: >-
+                  {{ state_attr('sensor.YOUR_MEDICATION_ENTITY_1', 'low_stock') == true }}
+            card:
+              type: markdown
+              content: >-
+                ⚠️ **Low Stock** — Only
+                {{ states('sensor.YOUR_MEDICATION_ENTITY_1') }} remaining.
+                Time to arrange a refill!
+              card_mod:
+                style: |
+                  ha-card {
+                    background: rgba(var(--error-color-rgb, 244,67,54), 0.12);
+                    border-left: 4px solid var(--error-color);
+                  }
+
+          # Action buttons
+          - type: horizontal-stack
+            cards:
+
+              # Take Dose button
+              # Replace YOUR_ITEM_UUID_1 with the item_id from the sensor attributes.
+              # Replace 1 in dose_quantity with the actual dose for this medication.
+              - type: button
+                name: Take Dose
+                icon: mdi:pill-off
+                tap_action:
+                  action: call-service
+                  service: medication_tracker.take_dose
+                  service_data:
+                    item_id: YOUR_ITEM_UUID_1
+                    dose_quantity: 1
+                confirm: true
+                card_mod:
+                  style: |
+                    ha-card {
+                      --mdc-theme-primary: var(--warning-color);
+                    }
+
+              # Add Stock (refill) button — opens a number input dialog
+              - type: button
+                name: Add Stock
+                icon: mdi:plus-box-outline
+                tap_action:
+                  action: call-service
+                  service: medication_tracker.add_quantity
+                  service_data:
+                    item_id: YOUR_ITEM_UUID_1
+                    quantity: 30       # <-- change to your usual refill quantity
+                confirm: true
+                card_mod:
+                  style: |
+                    ha-card {
+                      --mdc-theme-primary: var(--success-color);
+                    }
+
+              # Set Quantity button — for manual corrections
+              - type: button
+                name: Set Qty
+                icon: mdi:pencil-box-outline
+                tap_action:
+                  action: call-service
+                  service: medication_tracker.set_quantity
+                  service_data:
+                    item_id: YOUR_ITEM_UUID_1
+                    quantity: 30       # <-- change or use an input_number helper
+                confirm: true
+
+          # Schedule detail
+          - type: markdown
+            content: >-
+              **📅 Schedules**
+
+              {% set scheds = state_attr('sensor.YOUR_MEDICATION_ENTITY_1', 'schedules') %}
+              {% if scheds %}
+                {% for s in scheds %}
+                  - **{{ s.days | join(', ') | title }}** at
+                    {{ s.time[:5] }} — {{ s.dose_quantity }} dose(s)
+                    {% if not s.enabled %}*(disabled)*{% endif %}
+                {% endfor %}
+              {% else %}
+                _No schedules configured._
+                [Add a schedule](/config/integrations/integration/medication_tracker)
+              {% endif %}
+
+      # ── END MEDICATION 1 ────────────────────────────────────────────────────
+
+      # ======================================================================
+      # COPY THE BLOCK ABOVE FOR EACH ADDITIONAL MEDICATION
+      # ======================================================================
+
+      # ── MEDICATION 2 ───────────────────────────────────────────────────────
+      - type: custom:stack-in-card
+        mode: vertical
+        cards:
+          - type: picture-entity
+            entity: sensor.YOUR_MEDICATION_ENTITY_2
+            name: >-
+              {{ state_attr('sensor.YOUR_MEDICATION_ENTITY_2', 'name') }}
+              {{ state_attr('sensor.YOUR_MEDICATION_ENTITY_2', 'dosage') }}
+            show_name: true
+            show_state: false
+            image: >-
+              {{ state_attr('sensor.YOUR_MEDICATION_ENTITY_2', 'photo_path') or '/static/icons/favicon-192x192.png' }}
+            tap_action:
+              action: more-info
+
+          - type: entities
+            show_header_toggle: false
+            entities:
+              - entity: sensor.YOUR_MEDICATION_ENTITY_2
+                name: Quantity on Hand
+                icon: mdi:counter
+              - type: attribute
+                entity: sensor.YOUR_MEDICATION_ENTITY_2
+                attribute: refill_threshold
+                name: Refill Alert Threshold
+                icon: mdi:bell-alert-outline
+              - type: attribute
+                entity: sensor.YOUR_MEDICATION_ENTITY_2
+                attribute: low_stock
+                name: Low Stock
+                icon: mdi:alert-circle-outline
+              - type: attribute
+                entity: sensor.YOUR_MEDICATION_ENTITY_2
+                attribute: next_dose_time
+                name: Next Dose
+                icon: mdi:clock-outline
+                format: datetime
+              - type: attribute
+                entity: sensor.YOUR_MEDICATION_ENTITY_2
+                attribute: instructions
+                name: Instructions
+                icon: mdi:information-outline
+
+          - type: conditional
+            conditions:
+              - condition: template
+                value_template: >-
+                  {{ state_attr('sensor.YOUR_MEDICATION_ENTITY_2', 'low_stock') == true }}
+            card:
+              type: markdown
+              content: >-
+                ⚠️ **Low Stock** — Only
+                {{ states('sensor.YOUR_MEDICATION_ENTITY_2') }} remaining.
+                Time to arrange a refill!
+              card_mod:
+                style: |
+                  ha-card {
+                    background: rgba(var(--error-color-rgb, 244,67,54), 0.12);
+                    border-left: 4px solid var(--error-color);
+                  }
+
+          - type: horizontal-stack
+            cards:
+              - type: button
+                name: Take Dose
+                icon: mdi:pill-off
+                tap_action:
+                  action: call-service
+                  service: medication_tracker.take_dose
+                  service_data:
+                    item_id: YOUR_ITEM_UUID_2
+                    dose_quantity: 1
+                confirm: true
+
+              - type: button
+                name: Add Stock
+                icon: mdi:plus-box-outline
+                tap_action:
+                  action: call-service
+                  service: medication_tracker.add_quantity
+                  service_data:
+                    item_id: YOUR_ITEM_UUID_2
+                    quantity: 30
+                confirm: true
+
+              - type: button
+                name: Set Qty
+                icon: mdi:pencil-box-outline
+                tap_action:
+                  action: call-service
+                  service: medication_tracker.set_quantity
+                  service_data:
+                    item_id: YOUR_ITEM_UUID_2
+                    quantity: 30
+                confirm: true
+
+          - type: markdown
+            content: >-
+              **📅 Schedules**
+
+              {% set scheds = state_attr('sensor.YOUR_MEDICATION_ENTITY_2', 'schedules') %}
+              {% if scheds %}
+                {% for s in scheds %}
+                  - **{{ s.days | join(', ') | title }}** at
+                    {{ s.time[:5] }} — {{ s.dose_quantity }} dose(s)
+                    {% if not s.enabled %}*(disabled)*{% endif %}
+                {% endfor %}
+              {% else %}
+                _No schedules configured._
+              {% endif %}
+
+      # ── END MEDICATION 2 ────────────────────────────────────────────────────
+
+
+# ============================================================================
+# VIEW 3 — SCHEDULES
+# Full week schedule across all medications
+# ============================================================================
+  - title: Schedules
+    path: schedules
+    icon: mdi:calendar-clock
+
+    cards:
+
+      - type: markdown
+        content: >-
+          ### 📅 Weekly Medication Schedule
+
+          This view shows all scheduled doses across your medications for the
+          week. To add or change schedules, use
+          **[Settings → Integrations → Medication Tracker → Configure](
+          /config/integrations/integration/medication_tracker)**.
+
+      # ── Today's doses (template card) ─────────────────────────────────────
+      - type: markdown
+        title: Today's Doses
+        content: >-
+          {% set today = now().strftime('%A').lower() %}
+          {% set time_now = now().strftime('%H:%M') %}
+
+          **{{ now().strftime('%A, %B %-d') }}**
+
+          {% set ns = namespace(found=false) %}
+
+          {% for entity_id in [
+              'sensor.YOUR_MEDICATION_ENTITY_1',
+              'sensor.YOUR_MEDICATION_ENTITY_2'
+          ] %}
+            {% set scheds = state_attr(entity_id, 'schedules') %}
+            {% set med = state_attr(entity_id, 'name') %}
+            {% set dosage = state_attr(entity_id, 'dosage') %}
+            {% if scheds %}
+              {% for s in scheds %}
+                {% if today in s.get('days', []) and s.get('enabled', true) %}
+                  {% set ns.found = true %}
+                  - **{{ s.time[:5] }}** — {{ med }} {{ dosage }}
+                    *({{ s.dose_quantity }} dose)*
+                {% endif %}
+              {% endfor %}
+            {% endif %}
+          {% endfor %}
+
+          {% if not ns.found %}
+            _No doses scheduled for today._
+          {% endif %}
+
+      # ── Per-day schedule breakdown ──────────────────────────────────────────
+      - type: entities
+        title: Monday
+        icon: mdi:calendar-today
+        show_header_toggle: false
+        entities:
+          - type: custom:template-entity-row
+            entity: sensor.YOUR_MEDICATION_ENTITY_1
+            name: >-
+              {% set scheds = state_attr(config.entity, 'schedules') | selectattr('days', 'contains', 'monday') | list %}
+              {% if scheds %}
+                {{ state_attr(config.entity, 'name') }} — {{ scheds | map(attribute='time') | map('truncate', 5, true, '') | join(', ') }}
+              {% else %}No Monday dose{% endif %}
+            icon: mdi:pill
+
+          - type: custom:template-entity-row
+            entity: sensor.YOUR_MEDICATION_ENTITY_2
+            name: >-
+              {% set scheds = state_attr(config.entity, 'schedules') | selectattr('days', 'contains', 'monday') | list %}
+              {% if scheds %}
+                {{ state_attr(config.entity, 'name') }} — {{ scheds | map(attribute='time') | map('truncate', 5, true, '') | join(', ') }}
+              {% else %}No Monday dose{% endif %}
+            icon: mdi:pill
+
+      # ── Full schedule summary (template markdown) ───────────────────────────
+      - type: markdown
+        title: Full Week Schedule
+        content: >-
+          {% set days = ['monday','tuesday','wednesday','thursday','friday','saturday','sunday'] %}
+          {% set entities = [
+              'sensor.YOUR_MEDICATION_ENTITY_1',
+              'sensor.YOUR_MEDICATION_ENTITY_2'
+          ] %}
+
+          | Day | Medication | Time | Dose |
+          |-----|-----------|------|------|
+          {% for day in days %}
+            {% for entity_id in entities %}
+              {% set scheds = state_attr(entity_id, 'schedules') %}
+              {% set med = state_attr(entity_id, 'name') %}
+              {% set dosage = state_attr(entity_id, 'dosage') %}
+              {% if scheds %}
+                {% for s in scheds %}
+                  {% if day in s.get('days', []) and s.get('enabled', true) %}
+          | {{ day | title }} | {{ med }} {{ dosage }} | {{ s.time[:5] }} | {{ s.dose_quantity }} |
+                  {% endif %}
+                {% endfor %}
+              {% endif %}
+            {% endfor %}
+          {% endfor %}
+
+
+# ============================================================================
+# VIEW 4 — SERVICES / DEVELOPER
+# Direct service call panel for power users
+# ============================================================================
+  - title: Actions
+    path: actions
+    icon: mdi:cog-outline
+    visible:
+      - user: YOUR_HA_USERNAME   # Restrict to admin only — remove line to show all users
+
+    cards:
+
+      - type: markdown
+        content: >-
+          ### ⚙️ Manual Medication Actions
+
+          Use these panels to manually call Medication Tracker services.
+          Useful for correcting quantities, logging missed doses, or testing.
+
+          Find your **Item ID** (UUID) in Developer Tools → States →
+          click your medication sensor → `item_id` attribute.
+
+      # ── Take Dose ─────────────────────────────────────────────────────────
+      - type: entities
+        title: Take Dose
+        icon: mdi:pill-off
+        entities:
+          - domain: input_text
+            entity_id: input_text.med_action_item_id
+          - domain: input_number
+            entity_id: input_number.med_action_dose_quantity
+
+      - type: button
+        name: Call — medication_tracker.take_dose
+        icon: mdi:chevron-right-circle
+        tap_action:
+          action: call-service
+          service: medication_tracker.take_dose
+          service_data:
+            item_id: >-
+              {{ states('input_text.med_action_item_id') }}
+            dose_quantity: >-
+              {{ states('input_number.med_action_dose_quantity') | float(1) }}
+        confirm: true
+
+      # ── Add Quantity ───────────────────────────────────────────────────────
+      - type: entities
+        title: Add Quantity (Refill)
+        icon: mdi:plus-box-outline
+        entities:
+          - domain: input_text
+            entity_id: input_text.med_action_item_id
+          - domain: input_number
+            entity_id: input_number.med_action_quantity
+
+      - type: button
+        name: Call — medication_tracker.add_quantity
+        icon: mdi:chevron-right-circle
+        tap_action:
+          action: call-service
+          service: medication_tracker.add_quantity
+          service_data:
+            item_id: >-
+              {{ states('input_text.med_action_item_id') }}
+            quantity: >-
+              {{ states('input_number.med_action_quantity') | float(0) }}
+        confirm: true
+
+      # ── Set Quantity ───────────────────────────────────────────────────────
+      - type: entities
+        title: Set Quantity (Manual Override)
+        icon: mdi:pencil-box-outline
+        entities:
+          - domain: input_text
+            entity_id: input_text.med_action_item_id
+          - domain: input_number
+            entity_id: input_number.med_action_quantity
+
+      - type: button
+        name: Call — medication_tracker.set_quantity
+        icon: mdi:chevron-right-circle
+        tap_action:
+          action: call-service
+          service: medication_tracker.set_quantity
+          service_data:
+            item_id: >-
+              {{ states('input_text.med_action_item_id') }}
+            quantity: >-
+              {{ states('input_number.med_action_quantity') | float(0) }}
+        confirm: true
+
+      - type: markdown
+        content: >-
+          #### Helper Entities Required for This View
+
+          Add the following to your `configuration.yaml` to enable the
+          input fields above:
+
+          ```yaml
+          input_text:
+            med_action_item_id:
+              name: Medication Item ID (UUID)
+              max: 36
+
+          input_number:
+            med_action_dose_quantity:
+              name: Dose Quantity
+              min: 0.5
+              max: 100
+              step: 0.5
+              initial: 1
+
+            med_action_quantity:
+              name: Quantity
+              min: 0
+              max: 9999
+              step: 0.5
+              initial: 30
+          ```
