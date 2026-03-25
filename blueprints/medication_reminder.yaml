@@ -1,0 +1,299 @@
+# ============================================================================
+# Medication Tracker — Scheduled TTS Reminder Blueprint
+# ============================================================================
+# Repository : https://github.com/YOUR_USERNAME/medication-tracker
+# Docs       : blueprints/README.md
+# HA minimum : 2024.1.0  (uses tts.speak, repeat for_each, if/then actions)
+# ============================================================================
+
+blueprint:
+  name: "Medication Tracker — Scheduled TTS Reminder"
+
+  description: >-
+    Announces medication reminders on smart speakers via TTS when a scheduled
+    dose time is reached, using schedule data stored in the Medication Tracker
+    sensor attributes.
+
+    **Supports multiple medications** in one automation — add as many sensor
+    entities as you like and all matching schedules fire together.
+
+    **How it works:** A `time_pattern` trigger polls every minute. A guard
+    condition checks whether the current time and weekday match any enabled
+    schedule across all selected sensors. When a match is found the automation
+    loops over every matching schedule, renders a personalised TTS message
+    that includes the medication name, dosage and instructions, speaks it on
+    all selected speakers, and (optionally) calls `medication_tracker.take_dose`
+    to deduct the scheduled dose from on-hand stock automatically.
+
+    **Requirements:**
+
+    - Medication Tracker custom integration (installed and configured).
+    - A working TTS integration — e.g. **Google Translate TTS**
+      (`tts.google_translate`), **Nabu Casa Cloud TTS**
+      (`tts.nabu_casa_cloud_tts`), or **Piper** (`tts.piper`).
+    - One or more `media_player` entities (Google Home, Amazon Echo via Alexa
+      Media Player, Sonos, etc.).
+
+  domain: automation
+
+  source_url: https://github.com/YOUR_USERNAME/medication-tracker/blob/main/blueprints/automation/medication_tracker/medication_reminder.yaml
+
+  # --------------------------------------------------------------------------
+  # Inputs
+  # --------------------------------------------------------------------------
+  input:
+
+    # ── Medication sensors ───────────────────────────────────────────────────
+    medication_sensors:
+      name: Medication Sensor(s)
+      description: >-
+        One or more `sensor.*` entities created by the Medication Tracker
+        integration. Schedule data (days, time, dose_quantity, enabled) is
+        read from each sensor's `schedules` attribute at runtime — no manual
+        time input is needed here.
+      selector:
+        entity:
+          domain: sensor
+          multiple: true
+
+    # ── TTS engine ───────────────────────────────────────────────────────────
+    tts_entity:
+      name: TTS Engine
+      description: >-
+        The `tts.*` entity that will synthesise speech. This is the **entity**,
+        not the service name.
+
+        Common values:
+          • `tts.google_translate` (built-in, no account needed)
+          • `tts.nabu_casa_cloud_tts` (Nabu Casa / HA Cloud subscription)
+          • `tts.piper` (local neural TTS, add-on required)
+      selector:
+        entity:
+          domain: tts
+
+    # ── Media players ────────────────────────────────────────────────────────
+    media_players:
+      name: Smart Speaker(s)
+      description: >-
+        One or more `media_player` entities to announce on. All selected
+        speakers will announce simultaneously.
+      selector:
+        entity:
+          domain: media_player
+          multiple: true
+
+    # ── Main announcement template ───────────────────────────────────────────
+    announcement_template:
+      name: Announcement Message
+      description: >-
+        Jinja2 template rendered into the spoken message for each matching
+        medication. The following variables are injected at render time:
+
+          • `{{ med_name }}`      — medication name (e.g. "Metformin")
+          • `{{ dosage }}`        — dosage string (e.g. "500mg tablet")
+          • `{{ instructions }}`  — usage instructions (e.g. "take with food")
+          • `{{ quantity }}`      — current on-hand count as a float
+          • `{{ dose_quantity }}` — units being deducted this dose (float)
+          • `{{ schedule_time }}` — scheduled time string in HH:MM format
+      default: >-
+        Medication reminder.
+        Time to take your {{ med_name }}.
+        {%- if dosage | trim %} {{ dosage }}.{% endif %}
+        {%- if instructions | trim %} {{ instructions }}.{% endif %}
+        You have {{ quantity | int }}
+        {{ 'dose' if quantity | int == 1 else 'doses' }} remaining.
+      selector:
+        text:
+          multiline: true
+
+    # ── Low stock warning ────────────────────────────────────────────────────
+    low_stock_warning:
+      name: Append Low Stock Warning
+      description: >-
+        When enabled, appends a refill reminder to the announcement whenever
+        the medication's `low_stock` attribute is `true` (quantity ≤ refill
+        threshold set on the medication).
+      default: true
+      selector:
+        boolean: {}
+
+    low_stock_template:
+      name: Low Stock Message
+      description: >-
+        Jinja2 template appended after the main announcement when low stock
+        is detected. Variables `{{ med_name }}` and `{{ quantity }}` are
+        available.
+      default: >-
+        Warning: {{ med_name }} is running low.
+        Only {{ quantity | int }} remaining. Please arrange a refill soon.
+      selector:
+        text:
+          multiline: true
+
+    # ── Auto dose logging ────────────────────────────────────────────────────
+    auto_take_dose:
+      name: Auto-Log Dose
+      description: >-
+        When enabled, calls `medication_tracker.take_dose` after the
+        announcement, automatically deducting the schedule's `dose_quantity`
+        from the medication's on-hand stock. Disable if you prefer to log
+        doses manually or via a separate automation.
+      default: true
+      selector:
+        boolean: {}
+
+    # ── Pre-announcement delay ───────────────────────────────────────────────
+    pre_announce_delay:
+      name: Pre-Announcement Delay
+      description: >-
+        Seconds to wait before speaking. Useful if your speaker needs a moment
+        to wake up after being idle, or if you want a short pause at trigger
+        time. Set to 0 to speak immediately.
+      default: 0
+      selector:
+        number:
+          min: 0
+          max: 60
+          step: 1
+          unit_of_measurement: s
+          mode: slider
+
+
+# ============================================================================
+# Trigger — fires every minute; the condition below filters to matching times.
+# ============================================================================
+trigger:
+  - platform: time_pattern
+    minutes: "/1"
+
+
+# ============================================================================
+# Blueprint-scoped variables (resolve !input once here for use in templates).
+# ============================================================================
+variables:
+  _sensors: !input medication_sensors
+  _ann_template: !input announcement_template
+  _low_stock_warning: !input low_stock_warning
+  _low_stock_template: !input low_stock_template
+  _auto_take_dose: !input auto_take_dose
+  _pre_delay: !input pre_announce_delay
+
+
+# ============================================================================
+# Guard condition — abort the run if nothing matches right now.
+# Prevents unnecessary action execution every minute.
+# ============================================================================
+condition:
+  - alias: "At least one enabled medication schedule matches now"
+    condition: template
+    value_template: >-
+      {% set ct = now().strftime('%H:%M') %}
+      {% set cd = now().strftime('%A').lower() %}
+      {% set ns = namespace(found=false) %}
+      {% for sensor in _sensors %}
+        {% set schedules = state_attr(sensor, 'schedules') %}
+        {% if schedules is not none %}
+          {% for sch in schedules %}
+            {% if sch.get('enabled', true)
+               and cd in sch.get('days', [])
+               and sch.get('time', '')[:5] == ct %}
+              {% set ns.found = true %}
+            {% endif %}
+          {% endfor %}
+        {% endif %}
+      {% endfor %}
+      {{ ns.found }}
+
+
+# ============================================================================
+# Actions
+# ============================================================================
+action:
+  # Snapshot current time/day once so the values are consistent across loops.
+  - variables:
+      _current_time: "{{ now().strftime('%H:%M') }}"
+      _current_day: "{{ now().strftime('%A').lower() }}"
+
+  # Optional speaker wake-up delay.
+  - if:
+      - condition: template
+        value_template: "{{ _pre_delay | int(0) > 0 }}"
+    then:
+      - delay:
+          seconds: "{{ _pre_delay | int(0) }}"
+
+  # ── Outer loop: iterate over each selected medication sensor ───────────────
+  - repeat:
+      for_each: "{{ _sensors }}"
+      sequence:
+        # Save outer loop values before entering the inner loop.
+        - variables:
+            _sensor: "{{ repeat.item }}"
+            _schedules: "{{ state_attr(repeat.item, 'schedules') or [] }}"
+
+        # ── Inner loop: iterate over this sensor's schedules ─────────────────
+        - repeat:
+            for_each: "{{ _schedules }}"
+            sequence:
+              # Only act when this schedule is enabled, today is a scheduled
+              # day, and the current HH:MM matches the schedule's time.
+              - if:
+                  - condition: template
+                    value_template: >-
+                      {{ repeat.item.get('enabled', true)
+                         and _current_day in repeat.item.get('days', [])
+                         and repeat.item.get('time', '')[:5] == _current_time }}
+                then:
+                  # Resolve all medication / schedule values for use in templates.
+                  - variables:
+                      med_name: >-
+                        {{ state_attr(_sensor, 'name')
+                           | default('your medication', true) }}
+                      dosage: >-
+                        {{ state_attr(_sensor, 'dosage') | default('', true) }}
+                      instructions: >-
+                        {{ state_attr(_sensor, 'instructions')
+                           | default('', true) }}
+                      quantity: >-
+                        {{ state_attr(_sensor, 'quantity') | float(0) }}
+                      dose_quantity: >-
+                        {{ repeat.item.get('dose_quantity', 1.0) | float(1.0) }}
+                      schedule_time: >-
+                        {{ repeat.item.get('time', '')[:5] }}
+                      is_low_stock: >-
+                        {{ state_attr(_sensor, 'low_stock') | default(false) }}
+                      item_id: >-
+                        {{ state_attr(_sensor, 'item_id') }}
+                      # Render the full spoken message, appending the low-stock
+                      # suffix when the warning flag is on and stock is low.
+                      _message: >-
+                        {{ _ann_template }}
+                        {%- if _low_stock_warning and is_low_stock %}
+                        {{ _low_stock_template }}
+                        {%- endif %}
+
+                  # ── Announce via TTS ───────────────────────────────────────
+                  - service: tts.speak
+                    target:
+                      entity_id: !input tts_entity
+                    data:
+                      media_player_entity_id: !input media_players
+                      message: "{{ _message }}"
+
+                  # ── Optionally log the dose ────────────────────────────────
+                  - if:
+                      - condition: template
+                        value_template: "{{ _auto_take_dose }}"
+                    then:
+                      - service: medication_tracker.take_dose
+                        data:
+                          item_id: "{{ item_id }}"
+                          dose_quantity: "{{ dose_quantity }}"
+
+
+# ============================================================================
+# Mode — single prevents stacked runs if a minute boundary is somehow hit
+# twice; silent suppresses the harmless "automation already running" log noise.
+# ============================================================================
+mode: single
+max_exceeded: silent
