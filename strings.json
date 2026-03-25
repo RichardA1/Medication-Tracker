@@ -1,0 +1,174 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Medication Tracker",
+        "description": "Give this tracker a name (e.g. My Medications, John's Medications).",
+        "data": {
+          "title": "Tracker Name"
+        }
+      }
+    },
+    "abort": {
+      "already_configured": "A tracker with that name already exists."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Medication Tracker",
+        "menu_options": {
+          "add_medication": "Add a new medication",
+          "edit_medication": "Edit an existing medication",
+          "delete_medication": "Delete a medication",
+          "add_schedule": "Add a dose schedule",
+          "edit_schedule": "Edit a dose schedule",
+          "delete_schedule": "Delete a dose schedule"
+        }
+      },
+      "add_medication": {
+        "title": "Add Medication",
+        "data": {
+          "name": "Medication Name",
+          "dosage": "Dosage (e.g. 500mg, 10mg/5ml)",
+          "instructions": "Usage Instructions (e.g. Take 1 tablet twice daily with food)",
+          "quantity": "Quantity on Hand",
+          "refill_threshold": "Refill Reminder — alert when quantity reaches this number (0 to disable)",
+          "image": "Photo Path (e.g. /media/local/photo.jpg)"
+        }
+      },
+      "edit_medication": {
+        "title": "Edit Medication — Select",
+        "data": {
+          "med_id": "Select medication to edit"
+        }
+      },
+      "edit_medication_details": {
+        "title": "Edit Medication",
+        "data": {
+          "name": "Medication Name",
+          "dosage": "Dosage (e.g. 500mg, 10mg/5ml)",
+          "instructions": "Usage Instructions",
+          "quantity": "Quantity on Hand",
+          "refill_threshold": "Refill Reminder Threshold (0 to disable)",
+          "image": "Photo Path (e.g. /media/local/photo.jpg)"
+        }
+      },
+      "delete_medication": {
+        "title": "Delete Medication",
+        "description": "Warning: {warning}",
+        "data": {
+          "med_id": "Select medication to delete",
+          "confirm": "I understand this cannot be undone"
+        }
+      },
+      "add_schedule": {
+        "title": "Add Schedule — Select Medication",
+        "data": {
+          "med_id": "Select medication to add a schedule to"
+        }
+      },
+      "add_schedule_details": {
+        "title": "Add Dose Schedule",
+        "description": "Set the days and time for this dose. Use the take_dose service in your automation at this time to deduct from quantity on hand.",
+        "data": {
+          "days": "Days of the week",
+          "time": "Time of day",
+          "dose_quantity": "Dose amount (number of units to deduct per dose)",
+          "enabled": "Schedule enabled"
+        }
+      },
+      "edit_schedule": {
+        "title": "Edit Schedule — Select Medication",
+        "data": {
+          "med_id": "Select medication"
+        }
+      },
+      "edit_schedule_select": {
+        "title": "Edit Schedule — Select Schedule",
+        "data": {
+          "schedule_id": "Select schedule to edit"
+        }
+      },
+      "edit_schedule_details": {
+        "title": "Edit Dose Schedule",
+        "data": {
+          "days": "Days of the week",
+          "time": "Time of day",
+          "dose_quantity": "Dose amount (number of units to deduct per dose)",
+          "enabled": "Schedule enabled"
+        }
+      },
+      "delete_schedule": {
+        "title": "Delete Schedule — Select Medication",
+        "data": {
+          "med_id": "Select medication"
+        }
+      },
+      "delete_schedule_confirm": {
+        "title": "Delete Dose Schedule",
+        "description": "Warning: {warning}",
+        "data": {
+          "schedule_id": "Select schedule to delete",
+          "confirm": "I understand this cannot be undone"
+        }
+      }
+    },
+    "error": {
+      "name_required": "Medication name is required.",
+      "dosage_required": "Dosage is required.",
+      "title_required": "Tracker name is required.",
+      "days_required": "At least one day must be selected.",
+      "time_required": "Time of day is required.",
+      "confirm_required": "Please tick the confirmation box."
+    },
+    "abort": {
+      "no_medications": "No medications have been added yet.",
+      "no_schedules": "This medication has no schedules yet. Use Add a dose schedule first."
+    }
+  },
+  "services": {
+    "set_quantity": {
+      "name": "Set Quantity",
+      "description": "Set a medication's quantity on hand to an exact value. Use after a manual stock count or to correct an entry. Fires a live update — no restart required.",
+      "fields": {
+        "item_id": {
+          "name": "Item ID",
+          "description": "UUID of the medication to update. Found in the item_id attribute of the sensor entity."
+        },
+        "quantity": {
+          "name": "Quantity",
+          "description": "New quantity on hand. Must be 0 or greater."
+        }
+      }
+    },
+    "take_dose": {
+      "name": "Take Dose",
+      "description": "Subtract a dose from a medication's quantity on hand. Quantity is floored at 0. Call this from a time-based automation at each scheduled dose time, or from a dashboard button. Fires a live update — no restart required.",
+      "fields": {
+        "item_id": {
+          "name": "Item ID",
+          "description": "UUID of the medication to update. Found in the item_id attribute of the sensor entity."
+        },
+        "dose_quantity": {
+          "name": "Dose Amount",
+          "description": "Number of units to deduct. Defaults to 1. Match this to the dose_quantity set on the schedule."
+        }
+      }
+    },
+    "add_quantity": {
+      "name": "Add Quantity",
+      "description": "Add quantity to a medication's current stock on hand. Use after picking up a prescription refill. Fires a live update — no restart required.",
+      "fields": {
+        "item_id": {
+          "name": "Item ID",
+          "description": "UUID of the medication to update. Found in the item_id attribute of the sensor entity."
+        },
+        "quantity": {
+          "name": "Quantity to Add",
+          "description": "Number of units to add to current stock. Must be 0 or greater."
+        }
+      }
+    }
+  }
+}
